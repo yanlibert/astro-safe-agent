@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🪐 Astro-Agent | Full IDE</title>
+    
+    <style>
+        :root { --bg: #0d1117; --text: #c9d1d9; --accent: #238636; --danger: #da3633; --panel: #161b22; --warn: #d29922; --border: #30363d; }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Segoe UI', monospace; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 1100px; }
+        
+        /* Header */
+        h1 { border-bottom: 1px solid var(--border); padding-bottom: 10px; font-size: 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+        .status-bar { background: var(--panel); padding: 10px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 20px; font-size: 0.9rem; color: #8b949e; }
+        
+        /* Grid Layout */
+        .grid { display: grid; grid-template-columns: 35% 65%; gap: 20px; height: 600px; }
+        
+        /* Left Column (Input) */
+        .input-col { display: flex; flex-direction: column; gap: 10px; }
+        textarea { width: 100%; height: 150px; background: #010409; border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 6px; font-family: monospace; resize: none; box-sizing: border-box;}
+        button { background-color: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
+        button:hover { opacity: 0.9; }
+        button:disabled { background-color: #21262d; cursor: not-allowed; opacity: 0.5; }
+
+        /* Right Column (Tabs & Output) */
+        .output-col { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); overflow: hidden; }
+        
+        /* Tabs Styling */
+        .tabs { display: flex; border-bottom: 1px solid var(--border); background: #21262d; }
+        .tab { padding: 10px 20px; cursor: pointer; color: #8b949e; font-size: 0.9rem; border-right: 1px solid var(--border); background: transparent; border: none; outline: none; }
+        .tab:hover { color: var(--text); background: #30363d; }
+        .tab.active { background: var(--panel); color: var(--text); border-top: 2px solid var(--accent); font-weight: bold; }
+        
+        /* Panels */
+        .panel { flex: 1; display: none; overflow: auto; padding: 0; position: relative; }
+        .panel.active { display: block; }
+        
+        /* Console Log Styles */
+        .console-logs { padding: 15px; font-family: 'Courier New', monospace; font-size: 0.85rem; line-height: 1.4; }
+        .log-sys { color: #58a6ff; }
+        .log-ai { color: #f1e05a; }
+        .log-err { color: var(--danger); }
+        .log-warn { color: var(--warn); }
+        .log-ok { color: var(--accent); }
+        .log-step { border-top: 1px dashed var(--border); margin-top: 10px; padding-top: 10px; display: block; color: #8b949e; }
+
+        /* Code Viewer Styles */
+        pre { margin: 0; padding: 15px; }
+        code { font-family: 'Consolas', 'Monaco', monospace; color: #d2a8ff; }
+
+        /* Graph Center */
+        #plot-target { display: flex; justify-content: center; align-items: center; min-height: 100%; background: white; }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+    <script type="module">
+        import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+        window.webllm = webllm;
+    </script>
+</head>
+<body>
+
+<div class="container">
+    <h1>
+        <span>🪐 Astro-Agent <span style="font-size:0.6em; color:#8b949e;">// IDE Edition</span></span>
+        <span id="dataBadge" style="font-size:0.5em; background:#21262d; padding:5px 10px; border-radius:10px;">💾 No Data</span>
+    </h1>
+    
+    <div id="status" class="status-bar">⚡ Initialisation des systèmes...</div>
+
+    <div class="grid">
+        <div class="input-col">
+            <div style="background:var(--panel); padding:10px; border-radius:6px; font-size:0.8em; border: 1px solid var(--border);">
+                <b>Dataset :</b> planets.csv<br>
+                <b>Cols :</b> method, number, orbital_period, mass, distance, year
+            </div>
+            
+            <label>🤖 <b>Instruction</b></label>
+            <textarea id="userPrompt">Calcule la moyenne de la colonne 'mass' et trace un histogramme.</textarea>
+            
+            <button id="runBtn" onclick="startAgentLoop()" disabled>🚀 Lancer le Pipeline</button>
+            <div style="font-size: 0.75rem; color: #8b949e; text-align: center; margin-top: auto;">
+                Platform Engineering Demo<br>Powered by Pyodide & WebLLM
+            </div>
+        </div>
+
+        <div class="output-col">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('logs')">📋 Console Ops</button>
+                <button class="tab" onclick="switchTab('code')">🐍 Code Audit</button>
+                <button class="tab" onclick="switchTab('plot')">📊 Résultat Visuel</button>
+            </div>
+
+            <div id="panel-logs" class="panel active">
+                <div id="consoleOutput" class="console-logs">En attente de chargement...</div>
+            </div>
+
+            <div id="panel-code" class="panel" style="background:#0d1117;">
+                <pre><code id="codeViewer"># Le code généré s'affichera ici...</code></pre>
+            </div>
+
+            <div id="panel-plot" class="panel">
+                <div id="plot-target">
+                    <span style="color:black; opacity:0.5;">Aucun graphique généré</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Variables Globales
+    let pyodide = null;
+    let engine = null;
+    const modelId = "Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC"; 
+    
+    // UI Elements
+    let out, status, btn, plotTarget, codeViewer;
+
+    // --- TABS LOGIC ---
+    function switchTab(tabName) {
+        // Hide all panels
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        
+        // Show selected
+        document.getElementById(`panel-${tabName}`).classList.add('active');
+        // Activate button (trouver le bouton qui a l'onclick correspondant)
+        const buttons = document.querySelectorAll('.tab');
+        if(tabName === 'logs') buttons[0].classList.add('active');
+        if(tabName === 'code') buttons[1].classList.add('active');
+        if(tabName === 'plot') buttons[2].classList.add('active');
+    }
+
+    function log(msg, type="INFO") {
+        if (!out) return;
+        let colorClass = "log-sys";
+        if(type === "AI") colorClass = "log-ai";
+        if(type === "ERROR") colorClass = "log-err";
+        if(type === "SUCCESS") colorClass = "log-ok";
+        if(type === "WARN") colorClass = "log-warn";
+        if(type === "STEP") colorClass = "log-step";
+
+        const timestamp = new Date().toLocaleTimeString();
+        const safeMsg = msg.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        out.innerHTML += `<div class="${colorClass}">[${timestamp}] ${safeMsg}</div>`;
+        out.scrollTop = out.scrollHeight;
+    }
+
+    // --- 1. INITIALISATION ---
+    async function init() {
+        out = document.getElementById('consoleOutput');
+        status = document.getElementById('status');
+        btn = document.getElementById('runBtn');
+        plotTarget = document.getElementById('plot-target');
+        codeViewer = document.getElementById('codeViewer');
+
+        try {
+            log("Chargement Python WASM...", "SYS");
+            pyodide = await loadPyodide();
+            
+            log("Installation Pandas & Matplotlib...", "SYS");
+            await pyodide.loadPackage(["pandas", "matplotlib"]); 
+            
+            log("📥 DataOps: Téléchargement du Dataset NASA...", "SYS");
+            const response = await fetch("https://raw.githubusercontent.com/mwaskom/seaborn-data/master/planets.csv");
+            const csvData = await response.text();
+            pyodide.FS.writeFile("planets.csv", csvData);
+            
+            document.getElementById('dataBadge').innerText = "💾 Data: planets.csv (Loaded)";
+            document.getElementById('dataBadge').style.background = "#238636";
+            log("✅ Fichier 'planets.csv' monté.", "SUCCESS");
+
+            log("Initialisation GPU (WebLLM)...", "SYS");
+            const { MLCEngine } = window.webllm;
+            engine = new MLCEngine();
+            engine.setInitProgressCallback((r) => {
+                if(status) status.innerText = `⏳ Chargement Modèle: ${r.text}`;
+            });
+            await engine.reload(modelId);
+            
+            status.innerText = "✅ Système Prêt. GPU Actif.";
+            status.style.color = "#238636";
+            btn.disabled = false;
+            log("🤖 Agent prêt.", "SUCCESS");
+
+        } catch (e) {
+            if(out) log(`CRASH INIT: ${e.message}`, "ERROR");
+        }
+    }
+
+    // --- 2. LOGIQUE AGENT ---
+    async function startAgentLoop() {
+        btn.disabled = true;
+        plotTarget.innerHTML = '<span style="color:black; opacity:0.5;">Génération...</span>';
+        switchTab('logs'); // Focus sur les logs au début
+        
+        const userRequest = document.getElementById('userPrompt').value;
+        const maxRetries = 3;
+        let attempt = 1;
+        
+        let messages = [
+            { 
+                role: "system", 
+                content: `Tu es un Data Scientist Python expert (Platform Engineering).
+                CONTEXTE DATA:
+                - Le fichier est 'planets.csv'.
+                - COLONNES DISPONIBLES : 'method' (string), 'number' (int), 'orbital_period' (float), 'mass' (float), 'distance' (float), 'year' (int).
+                - ATTENTION : Il n'y a PAS de colonne 'date'. Utilise 'year' pour le temps.
+        
+                RÈGLES STRICTES DE SORTIE :
+                1. Écris ton code à l'intérieur de blocs Markdown \`\`\`python ... \`\`\`.
+                2. NE METS AUCUN TEXTE avant ou après le bloc de code. Pas d'excuses, pas d'explications.
+                3. Utilise 'plt.figure()', fais ton plot, et NE mets PAS plt.show().` 
+            },
+            { role: "user", content: userRequest }
+        ];
+
+        log("--- DÉMARRAGE PIPELINE ---", "STEP");
+
+        while (attempt <= maxRetries) {
+            log(`🔄 Tentative ${attempt}/${maxRetries}...`, "STEP");
+            
+            try {
+                log("Génération du code...", "AI");
+                const reply = await engine.chat.completions.create({ messages });
+                let rawCode = reply.choices[0].message.content;
+                // EXTRACTION INTELLIGENTE (Regex)
+                // On cherche un bloc ```python ... ``` ou juste ``` ... ```
+                const codeBlockRegex = /```(?:python)?([\s\S]*?)```/i;
+                const match = rawCode.match(codeBlockRegex);
+                
+                let cleanCode = "";
+                if (match) {
+                    // Si on trouve un bloc markdown, on prend l'intérieur
+                    cleanCode = match[1].trim();
+                } else {
+                    // Si l'IA n'a pas mis de markdown (rare), on prend tout mais on nettoie
+                    cleanCode = rawCode.replace(/```/g, "").trim();
+                }
+                
+                // --- MISE A JOUR DE L'ONGLET CODE ---
+                codeViewer.innerText = cleanCode;
+                log("Code injecté dans l'onglet 'Code Audit'.", "SYS");
+
+                log("Validation AST & Exécution...", "SYS");
+                const result = await runPythonSandbox(cleanCode);
+
+                if (result.success) {
+                    log("✅ SUCCÈS ! Code validé et exécuté.", "SUCCESS");
+                    log("--- SORTIE STANDARD ---", "STEP");
+                    log(result.output || "(Aucune sortie texte)", "INFO");
+                    
+                    // Auto-Switch si graphique détecté
+                    if(plotTarget.children.length > 0 && plotTarget.innerHTML.includes('svg')) {
+                        log("📊 Graphique détecté. Bascule vers l'onglet Visualisation.", "SUCCESS");
+                        setTimeout(() => switchTab('plot'), 1000); // Petit délai pour l'effet
+                    } else {
+                         // Sinon on montre les logs si c'est juste du texte
+                         log("📝 Pas de graphique, résultats dans les logs.", "SUCCESS");
+                    }
+                    break;
+                } else {
+                    log(`🛑 Echec: ${result.error}`, "ERROR");
+                    log("🔧 Feedback Loop: Envoi erreur à l'IA...", "WARN");
+                    
+                    messages.push({ role: "assistant", content: rawCode });
+                    messages.push({ 
+                        role: "user", 
+                        content: `Erreur d'exécution: "${result.error}". Corrige le code.` 
+                    });
+                    attempt++;
+                }
+
+            } catch (fatal) {
+                log(`Erreur fatale JS : ${fatal}`, "ERROR");
+                break;
+            }
+        }
+        if (attempt > maxRetries) log("💀 Abandon.", "ERROR");
+        btn.disabled = false;
+    }
+
+    // --- 3. PYTHON RUNNER ---
+async function runPythonSandbox(codeToRun) {
+        const wrapper = `
+import ast, sys, io, json, js
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Setup Graphique
+document = js.document
+target_div = document.getElementById("plot-target")
+document.pyodideMplTarget = target_div 
+
+# --- POLICY DEFINITION (V2) ---
+def check_safety(code):
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e: return False, f"Syntax Error: {e}"
+    
+    # 1. Liste Noire des modules
+    forbidden_modules = ['os', 'sys', 'subprocess', 'shutil', 'importlib']
+    # 2. Liste Noire des fonctions dangereuses
+    forbidden_calls = ['eval', 'exec', 'open', 'exit', 'quit']
+
+    for node in ast.walk(tree):
+        # Check: import os
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                root_module = alias.name.split('.')[0]
+                if root_module in forbidden_modules:
+                    return False, f"Security Alert: Import interdit -> '{alias.name}'"
+        
+        # Check: from os import system
+        if isinstance(node, ast.ImportFrom):
+            if node.module and node.module.split('.')[0] in forbidden_modules:
+                return False, f"Security Alert: Import interdit -> '{node.module}'"
+
+        # Check: eval(), open()
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in forbidden_calls:
+                return False, f"Security Alert: Fonction interdite -> '{node.func.id}'"
+                
+    return True, ""
+# ------------------------------
+
+# Execution
+code = '''${codeToRun.replace(/'/g, "\\'")}'''
+is_safe, msg = check_safety(code)
+res = {}
+
+if not is_safe:
+    res = {"success": False, "error": f"Policy Violation: {msg}", "output": ""}
+else:
+    old_stdout = sys.stdout
+    new_stdout = io.StringIO()
+    sys.stdout = new_stdout
+    try:
+        plt.clf() # Clear previous plots
+        exec(code)
+        if plt.get_fignums(): plt.show()
+        res = {"success": True, "error": "", "output": new_stdout.getvalue()}
+    except Exception as e:
+        res = {"success": False, "error": str(e), "output": ""}
+    finally:
+        sys.stdout = old_stdout
+
+json.dumps(res)
+`;
+        try {
+            const jsonString = await pyodide.runPythonAsync(wrapper);
+            return JSON.parse(jsonString);
+        } catch(e) {
+            return { success: false, error: "Pyodide Error: " + e.message, output: "" };
+        }
+    }
+
+    window.addEventListener('load', init);
+</script>
+
+</body>
+</html>
