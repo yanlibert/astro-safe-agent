@@ -68,6 +68,16 @@
         .matplotlib-toolbar-button { display: none !important; }
         #plot-target > span { display: none !important; }
         #plot-target canvas { max-width: 95%; max-height: 95%; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border-radius: 4px; }
+
+        #plot-target canvas[id*="rubberband"] {    
+            display: none !important;
+        }
+        /* S'assurer que le canvas principal reste propre */
+        #plot-target canvas:not([id*="rubberband"]) {
+            display: block !important;
+            max-width: 100%;
+            height: auto !important; /* Important pour éviter la déformation */
+        }
     </style>
 
     <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
