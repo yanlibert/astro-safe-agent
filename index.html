@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🪐 Astro-Agent | Self-Healing IDE</title>
+    <title>🪐 Astro-Agent | Multi-Source Platform</title>
     
     <style>
         :root { 
@@ -16,18 +16,24 @@
 
         .container { width: 100%; max-width: 1200px; display: flex; flex-direction: column; gap: 20px; height: 100%; }
         
-        /* Header */
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; }
         .header h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
         .badge { font-size: 0.8rem; background: var(--panel); padding: 4px 10px; border-radius: 12px; border: 1px solid var(--border); color: #8b949e; }
         .badge.active { background: var(--accent); color: white; border-color: var(--accent); }
 
-        /* Grid */
         .main-grid { display: grid; grid-template-columns: 350px 1fr; gap: 20px; flex: 1; min-height: 0; }
         
-        /* Controls (Left) */
         .control-panel { display: flex; flex-direction: column; gap: 15px; }
-        .dataset-info { background: var(--panel); padding: 12px; border-radius: 6px; border: 1px solid var(--border); font-size: 0.85rem; }
+        
+        /* DATASET CONFIGURATION */
+        .dataset-config { background: var(--panel); padding: 12px; border-radius: 6px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+        
+        /* Style pour le Select et l'Input */
+        select, input { background: #010409; border: 1px solid var(--border); color: white; padding: 8px; border-radius: 4px; width: 100%; font-family: var(--font-ui); font-size: 0.8rem; margin-bottom: 5px; }
+        select:focus, input:focus { outline: 1px solid var(--accent); }
+        
+        .col-badge { display: inline-block; background: #21262d; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; color: #8b949e; margin: 2px; border: 1px solid var(--border); }
+
         .input-group { display: flex; flex-direction: column; gap: 8px; flex: 1; }
         textarea { flex: 1; background: #010409; border: 1px solid var(--border); color: white; padding: 12px; border-radius: 6px; resize: none; font-family: var(--font-code); }
         textarea:focus { outline: 1px solid var(--accent); }
@@ -35,8 +41,9 @@
         button.btn-primary { background: var(--accent); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
         button.btn-primary:hover { opacity: 0.9; }
         button.btn-primary:disabled { background: var(--panel); color: #8b949e; cursor: not-allowed; opacity: 0.6; }
+        button.btn-sm { padding: 5px 10px; font-size: 0.8rem; background: #21262d; border: 1px solid var(--border); color: white; cursor: pointer; border-radius: 4px; width: 100%; }
+        button.btn-sm:hover { background: #30363d; }
 
-        /* Outputs (Right) */
         .output-panel { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
         .tabs { display: flex; background: #21262d; border-bottom: 1px solid var(--border); }
         .tab { padding: 10px 20px; cursor: pointer; color: #8b949e; background: none; border: none; border-right: 1px solid var(--border); font-size: 0.9rem; }
@@ -46,7 +53,6 @@
         .view { flex: 1; display: none; overflow: auto; position: relative; }
         .view.active { display: block; }
         
-        /* Logs */
         .console { padding: 15px; font-family: var(--font-code); font-size: 0.85rem; line-height: 1.4; }
         .log-sys { color: #58a6ff; }
         .log-ai { color: #f1e05a; }
@@ -55,27 +61,14 @@
         .log-ok { color: var(--accent); }
         .log-step { border-top: 1px dashed var(--border); margin-top: 8px; padding-top: 8px; color: #8b949e; display:block; }
 
-        /* Code & Plot */
         pre { margin: 0; padding: 15px; }
         code { color: #d2a8ff; font-family: var(--font-code); }
-        #plot-target { display: flex; justify-content: center; align-items: center; height: 100%; background: white; color: black; }
-        button.matplotlib-toolbar-button { 
-            display: none !important; 
-        }
         
-        /* On cache aussi les textes (comme "pdf", "png") qui pourraient traîner à côté */
-        #plot-target span {
-            /* Attention : cela cible tous les spans dans le plot, 
-               mais matplotlib met le graphique dans un canvas ou div, 
-               donc le span de la toolbar est généralement le seul à ce niveau */
-            display: none !important; 
-        }
-        
-        /* On s'assure que le canvas (le graphique) reste visible */
-        #plot-target canvas, #plot-target div {
-            display: block !important;
-        }
-</style>
+        #plot-target { display: flex; justify-content: center; align-items: center; height: 100%; background: white; color: black; position: relative; }
+        .matplotlib-toolbar-button { display: none !important; }
+        #plot-target > span { display: none !important; }
+        #plot-target canvas { max-width: 95%; max-height: 95%; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border-radius: 4px; }
+    </style>
 
     <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
     <script type="module">
@@ -87,15 +80,36 @@
 
 <div class="container">
     <div class="header">
-        <h1>🪐 Astro-Agent <span style="font-size:0.5em; color:#8b949e; margin-left:10px;">// Platform Engineering Demo</span></h1>
+        <h1>🪐 Astro-Agent <span style="font-size:0.5em; color:#8b949e; margin-left:10px;">// Multi-Source Platform</span></h1>
         <div id="statusBadge" class="badge">⚡ Chargement...</div>
     </div>
 
     <div class="main-grid">
         <div class="control-panel">
-            <div class="dataset-info">
-                <strong>📊 Dataset :</strong> planets.csv<br>
-                <code style="color:#8b949e">method, number, orbital_period, mass, distance, year</code>
+            <div class="dataset-config">
+                <label style="font-size:0.8rem; font-weight:bold;">🔗 Source de données</label>
+                
+                <select id="presetSelect" onchange="ui.handleSourceChange()">
+                    <option value="https://raw.githubusercontent.com/mwaskom/seaborn-data/master/planets.csv" selected>🪐 Exoplanètes (NASA)</option>
+                    
+                    <option value="https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2019/2019-06-11/meteorites.csv">☄️ Météorites (Toutes les chutes)</option>
+                    
+                    <option value="https://raw.githubusercontent.com/jbrownlee/Datasets/master/monthly-sunspots.csv">☀️ Taches Solaires (1749-1983)</option>
+                    
+                    <option value="https://raw.githubusercontent.com/plotly/datasets/master/solar.csv">🌍 Système Solaire (Simple)</option>
+                    
+                    <option value="https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-07-14/astronauts.csv">🧑‍🚀 Astronautes (Missions)</option>
+                    
+                    <option value="custom">✏️ URL Personnalisée...</option>
+                </select>
+
+                <input type="text" id="csvUrl" style="display:none;" placeholder="https://exemple.com/data.csv">
+                
+                <button class="btn-sm" onclick="app.loadDataset()">📥 Charger les données</button>
+                
+                <div id="colsContainer" style="margin-top:5px; line-height:1.2;">
+                    <span style="font-size:0.75rem; color:#8b949e;">En attente...</span>
+                </div>
             </div>
             
             <div class="input-group">
@@ -132,25 +146,29 @@
 </div>
 
 <script>
-    // ==========================================
-    // 1. CONFIG & STATE
-    // ==========================================
+    // 1. CONFIG
     const CONFIG = {
-        modelId: "Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC",
-        csvUrl: "https://raw.githubusercontent.com/mwaskom/seaborn-data/master/planets.csv"
+        modelId: "Qwen2.5-Coder-7B-Instruct-q4f32_1-MLC"
     };
-    let state = { pyodide: null, engine: null, isReady: false };
+    
+    let state = { 
+        pyodide: null, 
+        engine: null, 
+        isReady: false,
+        dataset: { name: "data.csv", columns: [] }
+    };
 
-    // ==========================================
     // 2. UI MANAGER
-    // ==========================================
     const ui = {
         refs: {
             out: document.getElementById('consoleOutput'),
             status: document.getElementById('statusBadge'),
             btn: document.getElementById('runBtn'),
             plot: document.getElementById('plot-target'),
-            code: document.getElementById('codeViewer')
+            code: document.getElementById('codeViewer'),
+            cols: document.getElementById('colsContainer'),
+            select: document.getElementById('presetSelect'),
+            urlInput: document.getElementById('csvUrl')
         },
         log: (msg, type="INFO") => {
             const map = { AI: "log-ai", ERROR: "log-err", SUCCESS: "log-ok", STEP: "log-step", WARN: "log-warn", SYS: "log-sys" };
@@ -162,31 +180,43 @@
             ui.refs.status.innerText = msg;
             if(ready) ui.refs.status.classList.add('active');
         },
+        updateCols: (cols) => {
+            if(!cols || cols.length === 0) return;
+            ui.refs.cols.innerHTML = cols.map(c => `<span class="col-badge">${c}</span>`).join('');
+        },
+        // Nouvelle fonction pour gérer l'affichage Select/Input
+        handleSourceChange: () => {
+            const val = ui.refs.select.value;
+            if (val === 'custom') {
+                ui.refs.urlInput.style.display = 'block';
+                ui.refs.urlInput.value = ""; // Reset
+                ui.refs.urlInput.focus();
+            } else {
+                ui.refs.urlInput.style.display = 'none';
+                ui.refs.urlInput.value = val; // On met l'URL du preset dans l'input caché
+            }
+        },
         switchTab: (tabName) => {
             document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
             document.getElementById(`view-${tabName}`).classList.add('active');
-            // Simple mapping for demo
             const idx = ['logs', 'code', 'plot'].indexOf(tabName);
             if(idx > -1) document.querySelectorAll('.tab')[idx].classList.add('active');
         }
     };
 
-    // ==========================================
-    // 3. CORE LOGIC (L'AGENT & LA BOUCLE)
-    // ==========================================
+    // 3. AGENT LOGIC
     const app = {
         init: async () => {
             try {
+                // Initialisation UI : Mettre la valeur par défaut du select dans l'input
+                ui.refs.urlInput.value = ui.refs.select.value;
+
                 ui.log("Initialisation Python WASM...", "SYS");
                 state.pyodide = await loadPyodide();
                 await state.pyodide.loadPackage(["pandas", "matplotlib"]);
-                
-                ui.log("Téléchargement Data...", "SYS");
-                const csv = await (await fetch(CONFIG.csvUrl)).text();
-                state.pyodide.FS.writeFile("planets.csv", csv);
 
-                ui.log("Chargement du Modèle (WebGPU)...", "SYS");
+                ui.log("Chargement LLM (WebGPU)...", "SYS");
                 const { MLCEngine } = window.webllm;
                 state.engine = new MLCEngine();
                 state.engine.setInitProgressCallback((r) => ui.setStatus(`⏳ ${r.text}`));
@@ -195,102 +225,127 @@
                 state.isReady = true;
                 ui.setStatus("✅ Système Prêt", true);
                 ui.refs.btn.disabled = false;
-                ui.log("Agent prêt.", "SUCCESS");
+                
+                // Chargement automatique du dataset par défaut
+                await app.loadDataset();
 
             } catch (e) { ui.log(`CRASH INIT: ${e.message}`, "ERROR"); }
+        },
+
+        loadDataset: async () => {
+            if(!state.pyodide) return;
+            
+            // On récupère l'URL (soit du preset, soit custom)
+            let url = ui.refs.select.value;
+            if (url === 'custom') {
+                url = ui.refs.urlInput.value;
+            }
+            if (!url) { ui.log("❌ URL vide", "ERROR"); return; }
+
+            const filename = "data.csv";
+            ui.log(`📥 Téléchargement...`, "SYS");
+            
+            try {
+                const response = await fetch(url);
+                if(!response.ok) throw new Error(`HTTP ${response.status}`);
+                const csvText = await response.text();
+                state.pyodide.FS.writeFile(filename, csvText);
+                
+                const colScript = `
+import pandas as pd
+try:
+    cols = pd.read_csv('${filename}', nrows=0).columns.tolist()
+    # Petit nettoyage des noms de colonnes pour éviter les espaces
+    cols = [c.strip() for c in cols]
+except Exception as e:
+    cols = []
+cols
+`;
+                const pyCols = await state.pyodide.runPythonAsync(colScript);
+                const colsJs = pyCols.toJs();
+                
+                state.dataset = { name: filename, columns: colsJs };
+                ui.updateCols(colsJs);
+                ui.log(`✅ Données montées (${colsJs.length} colonnes)`, "SUCCESS");
+
+            } catch(e) {
+                ui.log(`Echec chargement CSV: ${e.message}`, "ERROR");
+            }
         },
 
         runAgent: async () => {
             if(!state.isReady) return;
             ui.switchTab('logs');
             ui.refs.btn.disabled = true;
-            //ui.refs.plot.innerHTML = '<span style="opacity:0.5">Génération...</span>';
+            ui.refs.plot.innerHTML = '<span style="opacity:0.5">Génération...</span>';
             
             const prompt = document.getElementById('userPrompt').value;
             const maxRetries = 3;
             let attempt = 1;
 
-            // --- CONTEXTE & MEMOIRE ---
             let messages = [
                 { role: "system", content: `Tu es un Data Scientist Python expert.
-                  CONTEXTE:
-                  - Fichier: 'planets.csv'.
-                  - Colonnes: method, number, orbital_period, mass, distance, year.
-                  - Pas de colonne date, utilise 'year'.
+                  CONTEXTE DONNÉES:
+                  - Le fichier est : '${state.dataset.name}'
+                  - Colonnes disponibles : ${state.dataset.columns.join(', ')}
                   
-                  RÈGLES:
+                  RÈGLES DE SORTIE:
                   1. Code uniquement entre \`\`\`python ... \`\`\`.
                   2. Utilise pandas et matplotlib.
-                  3. Pas de texte superflu.` 
+                  3. NETTOYAGE: Si besoin, convertis les colonnes en numérique (pd.to_numeric) et gère les dates (pd.to_datetime).
+                  4. Pas de texte superflu.` 
                 },
                 { role: "user", content: prompt }
             ];
 
             ui.log("--- DÉMARRAGE PIPELINE ---", "STEP");
 
-            // --- LA BOUCLE DE SELF-HEALING ---
             while (attempt <= maxRetries) {
                 ui.log(`🔄 Tentative ${attempt}/${maxRetries}...`, "STEP");
 
                 try {
-                    // 1. Génération
                     ui.log("🧠 Génération du code...", "AI");
                     const reply = await state.engine.chat.completions.create({ messages });
                     const rawResponse = reply.choices[0].message.content;
 
-                    // Extraction robuste du code
                     let cleanCode = rawResponse;
                     const match = rawResponse.match(/```(?:python)?([\s\S]*?)```/i);
                     if (match) cleanCode = match[1].trim();
 
-                    ui.refs.code.innerText = cleanCode; // Mise à jour Visuelle
-                    ui.log("Code injecté dans l'audit.", "SYS");
+                    ui.refs.code.innerText = cleanCode;
+                    ui.log("Code généré.", "SYS");
 
-                    // 2. Exécution Sandbox
-                    ui.log("🛡️ Exécution sécurisée...", "SYS");
+                    ui.log("🛡️ Exécution Sandbox...", "SYS");
                     const result = await sandbox.execute(cleanCode);
 
                     if (result.success) {
-                        // --- SUCCÈS ---
-                        ui.log("✅ Code validé et exécuté.", "SUCCESS");
+                        ui.log("✅ Succès.", "SUCCESS");
                         if(result.output) ui.log(`STDOUT: ${result.output}`, "INFO");
                         
-                        // Check Graphique
-                        if(ui.refs.plot.innerHTML.includes('<svg')) {
-                            ui.log("📊 Graphique détecté. Bascule onglet.", "SUCCESS");
+                        if(ui.refs.plot.innerHTML.includes('<canvas')) {
+                            ui.log("📊 Graphique généré.", "SUCCESS");
                             setTimeout(() => ui.switchTab('plot'), 1000);
                         }
-                        break; // On sort de la boucle while
+                        break;
                     } else {
-                        // --- ECHEC & FEEDBACK LOOP ---
-                        ui.log(`🛑 Erreur Runtime: ${result.error}`, "ERROR");
-                        
+                        ui.log(`🛑 Erreur: ${result.error}`, "ERROR");
                         if(attempt < maxRetries) {
-                            ui.log("🔧 Auto-correction : Envoi de l'erreur à l'IA...", "WARN");
-                            
-                            // On nourrit l'historique de conversation
+                            ui.log("🔧 Self-Healing activé...", "WARN");
                             messages.push({ role: "assistant", content: rawResponse });
-                            messages.push({ 
-                                role: "user", 
-                                content: `Ton code a planté avec l'erreur : "${result.error}". Corrige le code.` 
-                            });
+                            messages.push({ role: "user", content: `Erreur Python: "${result.error}". Corrige le code.` });
                         }
                         attempt++;
                     }
                 } catch (fatal) {
-                    ui.log(`Fatal JS Error: ${fatal}`, "ERROR");
+                    ui.log(`Fatal Error: ${fatal}`, "ERROR");
                     break;
                 }
             }
-
-            if(attempt > maxRetries) ui.log("💀 Abandon après échecs multiples.", "ERROR");
             ui.refs.btn.disabled = false;
         }
     };
 
-    // ==========================================
-    // 4. PYTHON SANDBOX
-    // ==========================================
+    // 4. SANDBOX
     const sandbox = {
         execute: async (codeToRun) => {
             const wrapper = `
@@ -298,14 +353,10 @@ import ast, sys, io, json, js
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# On désactive la toolbar matplotlib
-plt.rcParams['toolbar'] = 'None' 
-
-# Cible pour les plots
+plt.rcParams['toolbar'] = 'none' 
 document = js.document
 document.pyodideMplTarget = document.getElementById("plot-target")
 
-# Politique de sécurité simple
 def check_safety(c):
     try:
         tree = ast.parse(c)
